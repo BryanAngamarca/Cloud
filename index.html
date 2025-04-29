@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Random Walk</title>
+    <style>
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        font-family: Arial, sans-serif;
+      }
+      canvas {
+        border: 1px solid black;
+        margin-top: 10px;
+      }
+      button {
+        margin-top: 10px;
+        padding: 10px 20px;
+        font-size: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Random Walk</h1>
+    <canvas id="randomWalkCanvas" width="500" height="500"></canvas>
+    <button id="resetButton">Reiniciar Simulación</button>
+    <script>
+      const canvas = document.getElementById("randomWalkCanvas");
+      const ctx = canvas.getContext("2d");
+
+      const canvasSize = 500;
+      const stepSize = 20;
+      const initialSteps = 20;
+      const foodCount = 20;
+      const delay = 500;
+      const maxTurns = 3;
+      const particleCount = 5;
+      const startDelay = 500;
+
+      let currentTurn = 1;
+      let particles = [];
+      let foods = [];
+      let interval;
+
+      const corners = [
+        { x: 0, y: 0 },
+        { x: canvasSize - stepSize, y: 0 },
+        { x: 0, y: canvasSize - stepSize },
+        { x: canvasSize - stepSize, y: canvasSize - stepSize },
+      ];
+
+      function generateFoods() {
+        foods.length = 0;
+        for (let i = 0; i < foodCount; i++) {
+          foods.push({
+            x: Math.floor(Math.random() * (canvasSize / stepSize)) * stepSize,
+            y: Math.floor(Math.random() * (canvasSize / stepSize)) * stepSize,
+          });
+        }
+      }
+
+      function initializeParticles() {
+        particles = Array.from({ length: particleCount }, (_, index) => ({
+          id: `P${index + 1}`,
+          ...corners[Math.floor(Math.random() * corners.length)],
+          stepsLeft: initialSteps,
+          alive: true,
+          ate: false,
+          foodEaten: 0,
+          speed: stepSize,
+        }));
+      }
+
+      function drawGrid() {
+        ctx.strokeStyle = "#ddd";
+        ctx.lineWidth = 0.5;
+
+        for (let x = 0; x <= canvasSize; x += stepSize) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, canvasSize);
+          ctx.stroke();
+        }
+
+        for (let y = 0; y <= canvasSize; y += stepSize) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(canvasSize, y);
+          ctx.stroke();
+        }
+      }
+
+      function drawCircle(x, y, radius, color) {
+        ctx.beginPath();
+        ctx.arc(
+          x + stepSize / 2,
+          y + stepSize / 2,
+          radius,
+          0,
+          Math.PI * 2,
+          false
+        );
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.closePath();
+      }
+
+      function drawParticles() {
+        particles.forEach((particle) => {
+          if (particle.alive) {
+            const color = particle.foodEaten >= 2 ? "red" : "blue";
+            drawCircle(particle.x, particle.y, stepSize / 2, color);
+            ctx.fillStyle = "black";
+            ctx.font = "12px Arial";
+            ctx.fillText(
+              particle.id,
+              particle.x + stepSize / 4,
+              particle.y - stepSize / 4
+            );
+          }
+        });
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, canvasSize, canvasSize);
+        drawGrid();
+        foods.forEach((food) => {
+          drawCircle(food.x, food.y, stepSize / 2, "green");
+        });
+        drawParticles();
+        ctx.fillStyle = "black";
+        ctx.font = "16px Arial";
+        ctx.fillText(`Vuelta: ${currentTurn}/${maxTurns}`, 10, canvasSize + 20);
+        ctx.fillText(
+          `Partículas vivas: ${particles.filter((p) => p.alive).length}`,
+          10,
+          canvasSize + 40
+        );
+      }
+
+      function moveParticles() {
+        let aliveParticles = particles.filter((p) => p.alive);
+
+        if (aliveParticles.length === 0) {
+          clearInterval(interval);
+          console.log("No hay más partículas. Simulación terminada.");
+          alert("No hay más partículas. Simulación terminada.");
+          return;
+        }
+
+        aliveParticles.forEach((particle) => {
+          if (particle.stepsLeft > 0) {
+            const nearbyFood = foods.find(
+              (food) =>
+                Math.abs(food.x - particle.x) <= stepSize &&
+                Math.abs(food.y - particle.y) <= stepSize &&
+                (food.x === particle.x || food.y === particle.y) // Evitar movimiento diagonal
+            );
+
+            if (nearbyFood) {
+              particle.x = nearbyFood.x;
+              particle.y = nearbyFood.y;
+              particle.ate = true;
+              particle.foodEaten++;
+              foods = foods.filter(
+                (food) => !(food.x === nearbyFood.x && food.y === nearbyFood.y)
+              );
+              console.log(
+                `La partícula ${particle.id} en (${particle.x}, ${particle.y}) comió en la vuelta ${currentTurn}.`
+              );
+
+              if (particle.foodEaten === 2) {
+                particle.speed += stepSize;
+                console.log(
+                  `La partícula ${particle.id} aumentó su velocidad a ${particle.speed}.`
+                );
+              }
+            } else {
+              const directions = [
+                { x: stepSize, y: 0 },
+                { x: -stepSize, y: 0 },
+                { x: 0, y: stepSize },
+                { x: 0, y: -stepSize },
+              ];
+
+              let newX,
+                newY,
+                validMove = false,
+                attempts = 0;
+
+              while (!validMove && attempts < directions.length) {
+                const direction =
+                  directions[Math.floor(Math.random() * directions.length)];
+                newX = particle.x + direction.x * (particle.speed / stepSize);
+                newY = particle.y + direction.y * (particle.speed / stepSize);
+
+                const isOccupied = particles.some(
+                  (p) => p.alive && p.x === newX && p.y === newY
+                );
+
+                if (
+                  newX >= 0 &&
+                  newX < canvasSize &&
+                  newY >= 0 &&
+                  newY < canvasSize &&
+                  !isOccupied
+                ) {
+                  validMove = true;
+                } else {
+                  attempts++;
+                }
+              }
+
+              if (validMove) {
+                particle.x = newX;
+                particle.y = newY;
+                particle.stepsLeft--;
+              }
+            }
+
+            if (particle.stepsLeft <= 0 && !particle.ate) {
+              particle.alive = false;
+            }
+          }
+        });
+
+        draw();
+
+        if (aliveParticles.every((p) => p.stepsLeft <= 0)) {
+          clearInterval(interval);
+          setTimeout(() => {
+            if (currentTurn < maxTurns) {
+              currentTurn++;
+              particles = particles
+                .filter((p) => p.alive)
+                .map((p) => ({
+                  ...p,
+                  ...corners[Math.floor(Math.random() * corners.length)],
+                  stepsLeft: initialSteps,
+                  ate: false,
+                  foodEaten: 0,
+                }));
+              console.log(`Comienza la vuelta ${currentTurn}.`);
+              interval = setInterval(moveParticles, delay);
+            } else {
+              console.log(
+                "Simulación completada. Todas las vueltas han finalizado."
+              );
+              alert("Simulación completada. Todas las vueltas han finalizado.");
+            }
+          }, startDelay);
+        }
+      }
+
+      function startSimulation() {
+        currentTurn = 1;
+        generateFoods();
+        initializeParticles();
+        console.log(`Comienza la vuelta ${currentTurn}.`);
+        draw();
+
+        setTimeout(() => {
+          interval = setInterval(moveParticles, delay);
+        }, startDelay);
+      }
+
+      document.getElementById("resetButton").addEventListener("click", () => {
+        clearInterval(interval);
+        startSimulation();
+      });
+
+      startSimulation();
+    </script>
+  </body>
+</html>
